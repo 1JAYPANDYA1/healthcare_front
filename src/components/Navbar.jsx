@@ -137,7 +137,7 @@ const Navbar = () => {
           <Link
             to="#about"
             className="text-lg font-semibold text-green-700 hover:text-green-800 transition duration-300"
-            onClick={() => { setIsMenuOpen(false), scrollToAbout() }}
+            onClick={() => { setIsMenuOpen(false); nevigateToAbout(); }}
           >
             About
           </Link>
