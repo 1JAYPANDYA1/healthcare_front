@@ -10,19 +10,20 @@ const ProtectedRoute = ({ element }) => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const res = await axios.post(`${API_URL}/auth/check`, {
+        // Fix: withCredentials should be in config object (3rd param), not data (2nd param)
+        const res = await axios.post(`${API_URL}/auth/check`, {}, {
           withCredentials: true,
         });
         setIsAuthenticated(true);
       } catch (err) {
+        console.error("Auth check failed:", err);
         setIsAuthenticated(false);
       }
     };
     checkAuth();
-  }, []);
+  }, [API_URL]);
 
   if (isAuthenticated === null) {
-    // optional: show loading spinner while checking auth
     return <div>Loading...</div>;
   }
 
