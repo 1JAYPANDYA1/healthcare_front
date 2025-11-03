@@ -7,17 +7,25 @@ const EmailPasswordForm = ({ register, password }) => {
 
   const validateEmail = async (email) => {
     try {
-      const response = await axios.post(`${REACT_APP_API_URL}/auth/check-email`, {
-        email,
-      });
+      const response = await axios.post(
+        `${REACT_APP_API_URL}/auth/check-email`,
+        { email },
+        { withCredentials: true } // Add this for consistency
+      );
+      
+      // If email exists, validation should FAIL
       if (response.data.exists) {
         toast.error("Email already registered");
-        return false;
+        return "Email already registered"; // Return error message instead of false
       }
+      
+      // Email doesn't exist, validation PASSES
       return true;
     } catch (error) {
-      toast.error("Error checking email");
-      return false;
+      console.error("Email validation error:", error);
+      // Don't block the form if the check-email API fails
+      // Let the user proceed and handle it on the backend during signup
+      return true;
     }
   };
 
@@ -31,9 +39,10 @@ const EmailPasswordForm = ({ register, password }) => {
         <input
           type="email"
           {...register("email", {
-            required: true,
+            required: "Email is required",
             pattern: {
               value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+              message: "Invalid email format"
             },
             validate: validateEmail,
           })}
@@ -48,10 +57,15 @@ const EmailPasswordForm = ({ register, password }) => {
         <input
           type="password"
           {...register("password", {
-            required: true,
-            minLength: 8,
-            pattern:
-              /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=[^@#$!%*?&]*[@#$!%*?&][^@#$!%*?&]*$)[A-Za-z\d@#$!%*?&]{8,}$/,
+            required: "Password is required",
+            minLength: {
+              value: 8,
+              message: "Password must be at least 8 characters"
+            },
+            pattern: {
+              value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$!%*?&])[A-Za-z\d@#$!%*?&]{8,}$/,
+              message: "Password must contain uppercase, lowercase, number and special character"
+            }
           })}
           className="mt-1 block w-full rounded-md px-3 py-2 border-2 border-green-300 focus:ring-green-600 focus:border-green-600 outline-none"
         />
@@ -64,8 +78,8 @@ const EmailPasswordForm = ({ register, password }) => {
         <input
           type="password"
           {...register("confirmPassword", {
-            required: true,
-            validate: (value) => value === password,
+            required: "Please confirm your password",
+            validate: (value) => value === password || "Passwords do not match"
           })}
           className="mt-1 block w-full border-2 border-green-300 rounded-md px-3 py-2 focus:ring-green-600 focus:border-green-600 outline-none"
         />
