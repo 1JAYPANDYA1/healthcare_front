@@ -35,20 +35,37 @@ const QualificationsForm = ({
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      const acceptedTypes = ["application/pdf", "image/jpeg", "image/jpg"];
+      
+      // Fixed: Added image/png and corrected image/jpg to image/jpeg
+      const acceptedTypes = [
+        "application/pdf", 
+        "image/jpeg",  // Covers both .jpg and .jpeg
+        "image/png"    // Added PNG support
+      ];
 
       if (!acceptedTypes.includes(file.type)) {
-        toast.error("Only PDF, JPG, and JPEG files are allowed");
+        toast.error("Only PDF, JPG, JPEG, and PNG files are allowed");
         e.target.value = "";
+        setPhoto(null);
+        return;
+      }
+
+      // Optional: Check file size (e.g., max 5MB)
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        toast.error("File size should not exceed 5MB");
+        e.target.value = "";
+        setPhoto(null);
         return;
       }
 
       setPhoto(file);
+      toast.success("File uploaded successfully!");
     }
   };
 
   const validateTimeRange = (timeFrom, timeTo) => {
-    console.log("compont",timeFrom,timeTo)
+    console.log("component", timeFrom, timeTo);
   };
 
   return (
@@ -105,7 +122,7 @@ const QualificationsForm = ({
 
       <div>
         <label className="block text-sm font-medium text-gray-700">
-          Upload Qualifications (PDF, JPG, JPEG)
+          Upload Qualifications (PDF, JPG, JPEG, PNG)
         </label>
         <input
           type="file"
@@ -114,8 +131,13 @@ const QualificationsForm = ({
             onChange: handleFileChange,
           })}
           className="mt-1 block w-full border-2 border-green-300 focus:ring-green-600 focus:border-green-600 outline-none rounded-md px-3 py-2"
-          accept=".pdf,.jpg,.jpeg"
+          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
         />
+        {photo && (
+          <p className="mt-2 text-sm text-green-600">
+            Selected file: {photo.name}
+          </p>
+        )}
       </div>
 
       <div>
@@ -178,7 +200,8 @@ const QualificationsForm = ({
           Available Time
         </label>
         <div className="flex space-x-4">
-          <div>
+          <div className="flex-1">
+            <label className="block text-xs text-gray-500 mb-1">From</label>
             <input
               type="time"
               {...register("timeFrom", {
@@ -192,11 +215,20 @@ const QualificationsForm = ({
               className="mt-1 block w-full border-2 border-green-300 focus:ring-green-600 focus:border-green-600 outline-none rounded-md px-3 py-2"
             />
           </div>
-          <div>
+          <div className="flex-1">
+            <label className="block text-xs text-gray-500 mb-1">To</label>
             <input
               type="time"
               {...register("timeTo", {
                 required: true,
+                validate: (value) => {
+                  const timeFrom = watch("timeFrom");
+                  if (timeFrom && value && value <= timeFrom) {
+                    toast.error("End time must be after start time");
+                    return "End time must be after start time";
+                  }
+                  return true;
+                },
               })}
               className="mt-1 block w-full border-2 border-green-300 focus:ring-green-600 focus:border-green-600 outline-none rounded-md px-3 py-2"
             />
