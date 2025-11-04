@@ -8,10 +8,15 @@ import io from "socket.io-client";
 import "../App.css";
 import { fetchUserData } from "../Store/patient/authslice";
 
-const socket = io("http://localhost:5000", {
+const socket = io("https://healwell-backend.onrender.com", {
   path: "/meet-socket/",
   withCredentials: true,
-  transports: ["websocket", "polling"]
+  transports: ["websocket", "polling"],
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  reconnectionAttempts: 5,
+  timeout: 20000
 });
 
 function Meeting() {

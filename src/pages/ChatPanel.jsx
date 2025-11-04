@@ -29,10 +29,15 @@ const ChatPanel = () => {
 
     useEffect(() => {
         dispatch(fetchUserData())
-        const newSocket = io('http://localhost:5000', {
+        const newSocket = io('https://healwell-backend.onrender.com', {
             path: "/chat-socket/",
             withCredentials: true,
-            transports: ["websocket", "polling"]
+            transports: ["websocket", "polling"],
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: 5,
+            timeout: 20000
         });
 
         newSocket.on('connect', () => {

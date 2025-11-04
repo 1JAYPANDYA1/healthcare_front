@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 
 const EmailPasswordForm = ({ register, password }) => {
   const REACT_APP_API_URL = process.env.REACT_APP_API_URL;
-
+ 
   const validateEmail = async (email) => {
     try {
       const response = await axios.post(
