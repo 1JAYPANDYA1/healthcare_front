@@ -20,15 +20,13 @@ const ChatPanel = () => {
     const [selectedImagePreview, setSelectedImagePreview] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState(new Set());
     const messagesEndRef = useRef(null);
-    const [isopen, setisopen] = useState(false)
-    const [msgStatus, setMsgStatus] = useState("")
     const [typingUsers, setTypingUsers] = useState(new Set());
     const typingTimeoutRef = useRef(null);
     const navigate = useNavigate();
 
-
     useEffect(() => {
-        dispatch(fetchUserData())
+        dispatch(fetchUserData());
+        
         const newSocket = io('https://healwell-backend.onrender.com', {
             path: "/chat-socket/",
             withCredentials: true,
@@ -41,7 +39,15 @@ const ChatPanel = () => {
         });
 
         newSocket.on('connect', () => {
-            // console.log('Connected to socket');
+            console.log('✅ Chat socket connected:', newSocket.id);
+        });
+
+        newSocket.on('connect_error', (error) => {
+            console.error('❌ Chat socket connection error:', error);
+        });
+
+        newSocket.on('disconnect', (reason) => {
+            console.log('⚠️ Chat socket disconnected:', reason);
         });
 
         newSocket.on('activeUsers', (activeUserIds) => {
@@ -90,13 +96,23 @@ const ChatPanel = () => {
             scrollToBottom();
         });
 
+        // ✅ FIXED - Only update the specific message that matches messageId
         newSocket.on('messageStatusUpdated', ({ messageId, status }) => {
-            console.log(status)
+            console.log('📬 Message status updated:', messageId, status);
             setMessages(prev => prev.map(msg =>
-                msg.id === messageId ? { ...msg, status } : { ...msg, status }
+                msg.id === messageId ? { ...msg, status } : msg
             ));
-
         });
+
+        // Handle messageSent event to update temp message with real one
+        newSocket.on('messageSent', (sentMessage) => {
+            console.log('✅ Message sent confirmation:', sentMessage);
+            setMessages(prev => prev.map(msg => 
+                msg.id.toString().startsWith('temp-') && 
+                msg.message === sentMessage.message ? sentMessage : msg
+            ));
+        });
+
         newSocket.on('userTyping', ({ userId, isTyping }) => {
             setTypingUsers(prev => {
                 const newUsers = new Set(prev);
@@ -112,9 +128,12 @@ const ChatPanel = () => {
         setSocket(newSocket);
 
         return () => {
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
             newSocket.disconnect();
         };
-    }, []);
+    }, [dispatch]);
 
     useEffect(() => {
         const fetchList = async () => {
@@ -139,16 +158,20 @@ const ChatPanel = () => {
     }, [search, userlist]);
 
     useEffect(() => {
-        if (selectedUser && messages.length > 0) {
-            messages.forEach(msg => {
-                if (msg.status !== 'READ' &&
-                    msg.receiverId === (patientData?.patientId || patientData?.doctorId)) {
-                    socket?.emit('markAsRead', msg.id);
-                }
+        if (selectedUser && socket && messages.length > 0) {
+            // Only mark unread messages as read
+            const unreadMessages = messages.filter(msg =>
+                msg.status !== 'READ' &&
+                msg.receiverId === (patientData?.patientId || patientData?.doctorId) &&
+                (msg.senderId === selectedUser?.doctorId || msg.senderId === selectedUser?.patientId)
+            );
+
+            unreadMessages.forEach(msg => {
+                socket.emit('markAsRead', msg.id);
             });
         }
-        scrollToBottom()
-    }, [selectedUser, messages]);
+        scrollToBottom();
+    }, [selectedUser, messages, socket, patientData]);
 
     const scrollToBottom = () => {
         if (messagesEndRef.current) {
@@ -166,6 +189,7 @@ const ChatPanel = () => {
 
     const sendMessage = () => {
         if (!messageInput.trim() || !selectedUser || !socket) return;
+        
         const initialStatus = onlineUsers.has(selectedUser?.doctorId || selectedUser?.patientId)
             ? 'DELIVERED'
             : 'SENT';
@@ -197,9 +221,14 @@ const ChatPanel = () => {
         const formData = new FormData();
         formData.append('image', selectedImage);
         try {
-            const response = await axios.post(`${process.env.REACT_APP_API_URL}/uploads`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            const response = await axios.post(
+                `${process.env.REACT_APP_API_URL}/uploads`, 
+                formData, 
+                {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                    withCredentials: true
+                }
+            );
 
             if (response.data.url) {
                 const initialStatus = onlineUsers.has(selectedUser?.doctorId || selectedUser?.patientId)
@@ -228,17 +257,17 @@ const ChatPanel = () => {
                 scrollToBottom();
             }
         } catch (error) {
-            if (error.response.data.message === "Unauthorized: No token provided") {
-                window.location.href = "/login"
+            if (error.response?.data?.message === "Unauthorized: No token provided") {
+                window.location.href = "/login";
             }
-
             console.error('Error uploading image:', error);
             alert('Failed to upload image');
         }
     };
 
     const handleKeyPress = (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             sendMessage();
         }
     };
@@ -246,8 +275,7 @@ const ChatPanel = () => {
     const handleBack = () => {
         if (patientData?.patientId) {
             navigate("/patient-panel");
-        }
-        else {
+        } else {
             navigate("/doctor-panel");
         }
     };
@@ -260,47 +288,51 @@ const ChatPanel = () => {
     const getMessageStatus = (message) => {
         switch (message.status) {
             case 'READ':
-                return <div className="inline-flex relative w-4">
-                    <i className="fa-solid fa-check text-xs"></i>
-                    <i className="fa-solid fa-check text-xs -ml-1"></i>
-                </div>
+                return (
+                    <div className="inline-flex items-center">
+                        <i className="fa-solid fa-check text-xs"></i>
+                        <i className="fa-solid fa-check text-xs -ml-2"></i>
+                    </div>
+                );
             case 'DELIVERED':
-                return '✓✓';
+                return (
+                    <div className="inline-flex items-center">
+                        <i className="fa-solid fa-check text-xs"></i>
+                        <i className="fa-solid fa-check text-xs -ml-2"></i>
+                    </div>
+                );
             case 'SENT':
-                return '✓';
+                return <i className="fa-solid fa-check text-xs"></i>;
             default:
-                return '';
+                return <i className="fa-regular fa-clock text-xs"></i>;
         }
     };
 
     const getStatusColor = (status) => {
         switch (status) {
             case 'READ':
-                return 'text-blue-800';
+                return 'text-blue-500';
             case 'DELIVERED':
-                return 'text-gray-400';
+                return 'text-gray-500';
             case 'SENT':
                 return 'text-gray-400';
             default:
-                return '';
+                return 'text-gray-300';
         }
-    }
+    };
+
     const handleTyping = (e) => {
         setMessageInput(e.target.value);
 
-        // Emit typing event
         if (socket && selectedUser) {
             const receiverId = selectedUser?.doctorId || selectedUser?.patientId;
 
-            // Clear previous timeout
             if (typingTimeoutRef.current) {
                 clearTimeout(typingTimeoutRef.current);
             }
 
-            // Emit typing start
             socket.emit('startTyping', { receiverId });
 
-            // Set timeout to stop typing
             typingTimeoutRef.current = setTimeout(() => {
                 socket.emit('stopTyping', { receiverId });
             }, 1000);
@@ -378,28 +410,40 @@ const ChatPanel = () => {
                             </div>
                             <div className="flex flex-col">
                                 <h2 className="text-lg font-semibold text-green-900">{selectedUser.first_name} {selectedUser.last_name}</h2>
-                                <span className="text-sm text-green-900">{onlineUsers.has(selectedUser.doctorId || selectedUser.patientId) ? 'Online' : 'Offline'}</span>
+                                <span className="text-sm text-green-900">
+                                    {typingUsers.has(selectedUser?.doctorId || selectedUser?.patientId) 
+                                        ? 'typing...' 
+                                        : onlineUsers.has(selectedUser.doctorId || selectedUser.patientId) ? 'Online' : 'Offline'}
+                                </span>
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-scroll bg-green-50 p-3 rounded-lg space-y-4" ref={messagesEndRef}>
-                            {messages.filter(msg => (msg.senderId === selectedUser?.doctorId || msg.senderId === selectedUser?.patientId) || (msg.receiverId === selectedUser?.doctorId || msg.receiverId === selectedUser?.patientId)).map((msg, idx) => (
-                                <div key={idx} className={`flex ${isMessageFromCurrentUser(msg) ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-sm rounded-lg ${isMessageFromCurrentUser(msg) ? 'bg-green-300 text-green-900' : 'bg-green-400 text-green-900'}`}>
-                                        {msg.messageType === "image" ? (
-                                            <div className="p-1">
-                                                <img src={msg.message} alt="Shared image" className="max-w-xs rounded-lg" />
+                            {messages
+                                .filter(msg => 
+                                    (msg.senderId === selectedUser?.doctorId || msg.senderId === selectedUser?.patientId) || 
+                                    (msg.receiverId === selectedUser?.doctorId || msg.receiverId === selectedUser?.patientId)
+                                )
+                                .map((msg, idx) => (
+                                    <div key={idx} className={`flex ${isMessageFromCurrentUser(msg) ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-sm rounded-lg ${isMessageFromCurrentUser(msg) ? 'bg-green-300 text-green-900' : 'bg-green-400 text-green-900'}`}>
+                                            {msg.messageType === "image" ? (
+                                                <div className="p-1">
+                                                    <img src={msg.message} alt="Shared image" className="max-w-xs rounded-lg" />
+                                                </div>
+                                            ) : (
+                                                <div className="p-2">{msg.message}</div>
+                                            )}
+                                            <div className="text-xs opacity-70 p-1 text-right flex items-center justify-end gap-1">
+                                                <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                {isMessageFromCurrentUser(msg) && (
+                                                    <span className={getStatusColor(msg.status)}>
+                                                        {getMessageStatus(msg)}
+                                                    </span>
+                                                )}
                                             </div>
-                                        ) : (
-                                            <div className="p-2">{msg.message}</div>
-                                        )}
-                                        <div className="text-xs opacity-70 p-1 text-right flex items-center justify-end gap-1">
-                                            <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                            {isMessageFromCurrentUser(msg) && <span className={getStatusColor(msg.status)}>{getMessageStatus(msg)}</span>}
                                         </div>
                                     </div>
-                                </div>
-                            ))}
-                            {selectedUser && typingUsers.has(selectedUser?.doctorId || selectedUser?.patientId) && <div className="text-sm text-gray-500 italic">typing...</div>}
+                                ))}
                         </div>
                         <div className="mt-4">
                             {selectedImagePreview && (
@@ -466,7 +510,6 @@ const ChatPanel = () => {
             </div>
         </div>
     );
-
 };
 
 export default ChatPanel;
